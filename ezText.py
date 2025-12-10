@@ -145,6 +145,31 @@ class TextShortcutApp(QMainWindow):
                 'theme_auto': '자동 (시스템 따라가기)',
                 'theme_light': '라이트 테마',
                 'theme_dark': '다크 테마',
+                'update_available_title': '업데이트 사용 가능',
+                'update_available_text': '새 버전 ({0})이 사용 가능합니다!\n\n현재 버전: {1}',
+                'update_confirm': '지금 업데이트를 다운로드하고 설치하시겠습니까?',
+                'update_declined': '사용자가 업데이트를 거부했습니다',
+                'update_downloading': '{0} 버전으로 자동 업데이트 중...',
+                'download_starting': 'GitHub에서 다운로드 시작 중...',
+                'download_progress': '업데이트 다운로드 중: {0}% ({1}/{2} MB)',
+                'download_completed': '다운로드 완료: {0}',
+                'installer_launching': '설치 프로그램 실행 중...',
+                'installer_started': '설치 프로그램이 시작되었습니다. 설치 마법사를 따라주세요.',
+                'update_downloaded': '업데이트 다운로드 완료. 설치 프로그램이 자동으로 열립니다.',
+                'update_failed_msg': '업데이트 다운로드에 실패했습니다. 도움말 메뉴에서 수동으로 업데이트해주세요.',
+                'update_auto_failed': '자동 업데이트 실패',
+                'new_version_available': '새 버전 {0}이 사용 가능합니다!',
+                'update_title': '업데이트',
+                'update_success_msg': '업데이트 다운로드 성공!\n\n설치 프로그램이 지금 열립니다.\n설치 마법사를 따라주세요.',
+                'update_error_title': '업데이트 오류',
+                'update_error_msg': '업데이트 다운로드에 실패했습니다.',
+                'update_checking': '업데이트 확인 중...',
+                'no_updates': '최신 버전을 사용 중입니다',
+                'up_to_date': '최신 버전',
+                'up_to_date_msg': '이미 최신 버전 ({0})을 사용하고 있습니다.',
+                'update_check_failed': '업데이트 확인 실패',
+                'update_check_failed_msg': '업데이트를 확인할 수 없습니다.\n\n오류: {0}',
+                'update_installer_launched': '업데이트 설치 프로그램 시작됨',
                 'github_url': 'https://github.com/gloriouslegacy/ezText/releases',
             },
             'en': {
@@ -201,6 +226,31 @@ class TextShortcutApp(QMainWindow):
                 'theme_auto': 'Auto (Follow System)',
                 'theme_light': 'Light Theme',
                 'theme_dark': 'Dark Theme',
+                'update_available_title': 'Update Available',
+                'update_available_text': 'A new version ({0}) is available!\n\nCurrent version: {1}',
+                'update_confirm': 'Do you want to download and install the update now?',
+                'update_declined': 'Update declined by user',
+                'update_downloading': 'Auto-updating to version {0}...',
+                'download_starting': 'Starting download from GitHub...',
+                'download_progress': 'Downloading update: {0}% ({1}/{2} MB)',
+                'download_completed': 'Download completed: {0}',
+                'installer_launching': 'Launching installer...',
+                'installer_started': 'Installer started. Please follow the installation wizard.',
+                'update_downloaded': 'Update downloaded. Installer will open automatically.',
+                'update_failed_msg': 'Failed to download update. Please update manually from Help menu.',
+                'update_auto_failed': 'Auto-update failed',
+                'new_version_available': 'New version {0} is available!',
+                'update_title': 'Update',
+                'update_success_msg': 'Update downloaded successfully!\n\nThe installer will open now.\nPlease follow the installation wizard.',
+                'update_error_title': 'Update Error',
+                'update_error_msg': 'Failed to download update.',
+                'update_checking': 'Checking for updates...',
+                'no_updates': 'No updates available',
+                'up_to_date': 'Up to Date',
+                'up_to_date_msg': 'You are already using the latest version ({0}).',
+                'update_check_failed': 'Update Check Failed',
+                'update_check_failed_msg': 'Could not check for updates.\n\nError: {0}',
+                'update_installer_launched': 'Update installer launched',
                 'github_url': 'https://github.com/gloriouslegacy/ezText/releases',
             }
         }
@@ -773,12 +823,13 @@ class TextShortcutApp(QMainWindow):
         # Don't start recording if text input has focus
         if self.text_input.hasFocus():
             return
-        
+
         self.shortcut_input.setText(self.tr('record_shortcut'))
         is_dark = darkdetect.isDark()
         recording_bg = "#4a4a2a" if is_dark else "#ffebcd"
+        recording_text = "#ffffff" if is_dark else "#000000"
         current_style = self.shortcut_input.styleSheet()
-        self.shortcut_input.setStyleSheet(f"{current_style} QLineEdit {{ background-color: {recording_bg}; border: 2px solid #ffa500; }}")
+        self.shortcut_input.setStyleSheet(f"{current_style} QLineEdit {{ background-color: {recording_bg}; border: 2px solid #ffa500; color: {recording_text}; }}")
         
         recorded_keys = set()
         key_mapping = {
@@ -1246,54 +1297,62 @@ class TextShortcutApp(QMainWindow):
 
     def on_update_available_auto(self, release_info):
         """Handle update available (automatic update on startup)"""
-        # Show notification that update is being downloaded
+        # Show notification that update is available
         if self.tray_icon:
             self.tray_icon.showMessage(
                 self.tr('title'),
-                f"New version {release_info['version']} is available! Downloading update...",
+                self.tr('new_version_available').format(release_info['version']),
                 QSystemTrayIcon.MessageIcon.Information,
                 5000
             )
 
-        # Automatically download and run installer
-        if release_info['download_url']:
-            self.log_status(f"Auto-updating to version {release_info['version']}...")
-            success = self.download_and_run_installer(release_info['download_url'])
+        # Ask user if they want to update
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setWindowTitle(self.tr('update_available_title'))
+        msg.setText(self.tr('update_available_text').format(release_info['version'], VERSION))
+        msg.setInformativeText(self.tr('update_confirm'))
+        msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setDefaultButton(QMessageBox.StandardButton.Yes)
 
-            if success:
-                # Show message that installer is running
-                if self.tray_icon:
-                    self.tray_icon.showMessage(
-                        self.tr('title'),
-                        "Update downloaded. Installer will open automatically.",
-                        QSystemTrayIcon.MessageIcon.Information,
-                        3000
-                    )
-                self.log_status("Update installer launched")
+        result = msg.exec()
+
+        if result == QMessageBox.StandardButton.Yes:
+            # User confirmed - download and install
+            if release_info['download_url']:
+                self.log_status(self.tr('update_downloading').format(release_info['version']))
+                success = self.download_and_run_installer(release_info['download_url'])
+
+                if success:
+                    # Show message that installer is running
+                    if self.tray_icon:
+                        self.tray_icon.showMessage(
+                            self.tr('title'),
+                            self.tr('update_downloaded'),
+                            QSystemTrayIcon.MessageIcon.Information,
+                            3000
+                        )
+                    self.log_status(self.tr('update_installer_launched'))
+                else:
+                    # Show error notification
+                    if self.tray_icon:
+                        self.tray_icon.showMessage(
+                            self.tr('title'),
+                            self.tr('update_failed_msg'),
+                            QSystemTrayIcon.MessageIcon.Warning,
+                            5000
+                        )
+                    self.log_status(self.tr('update_auto_failed'))
             else:
-                # Show error notification
-                if self.tray_icon:
-                    self.tray_icon.showMessage(
-                        self.tr('title'),
-                        "Failed to download update. Please update manually from Help menu.",
-                        QSystemTrayIcon.MessageIcon.Warning,
-                        5000
-                    )
-                self.log_status("Auto-update failed")
+                # No download URL - open releases page
+                webbrowser.open(release_info['html_url'])
         else:
-            # No download URL - open releases page
-            if self.tray_icon:
-                self.tray_icon.showMessage(
-                    self.tr('title'),
-                    f"New version {release_info['version']} is available! Click to download.",
-                    QSystemTrayIcon.MessageIcon.Information,
-                    5000
-                )
-            webbrowser.open(release_info['html_url'])
+            # User declined update
+            self.log_status(self.tr('update_declined'))
 
     def check_for_updates(self):
         """Check for updates manually from menu"""
-        self.log_status("Checking for updates...")
+        self.log_status(self.tr('update_checking'))
 
         self.update_thread = UpdateCheckThread(self.updater)
         self.update_thread.update_available.connect(self.on_update_available)
@@ -1305,16 +1364,16 @@ class TextShortcutApp(QMainWindow):
         """Handle update available"""
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Icon.Information)
-        msg.setWindowTitle("Update Available")
-        msg.setText(f"A new version ({release_info['version']}) is available!\n\nCurrent version: {VERSION}")
-        msg.setInformativeText("Do you want to download and install the update?")
+        msg.setWindowTitle(self.tr('update_available_title'))
+        msg.setText(self.tr('update_available_text').format(release_info['version'], VERSION))
+        msg.setInformativeText(self.tr('update_confirm'))
         msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
 
         result = msg.exec()
 
         if result == QMessageBox.StandardButton.Yes:
             if release_info['download_url']:
-                self.log_status("Downloading update...")
+                self.log_status(self.tr('update_downloading').format(release_info['version']))
 
                 # Setup version: Download and run installer directly (no updater.exe)
                 # The installer will handle closing the app and updating files
@@ -1323,12 +1382,12 @@ class TextShortcutApp(QMainWindow):
                 if success:
                     QMessageBox.information(
                         self,
-                        "Update",
-                        "Update downloaded successfully!\n\nThe installer will open now.\nPlease follow the installation wizard."
+                        self.tr('update_title'),
+                        self.tr('update_success_msg')
                     )
                     # Don't exit here - let the installer close us
                 else:
-                    QMessageBox.warning(self, "Update Error", "Failed to download update.")
+                    QMessageBox.warning(self, self.tr('update_error_title'), self.tr('update_error_msg'))
             else:
                 # Open releases page if no direct download
                 webbrowser.open(release_info['html_url'])
@@ -1354,7 +1413,7 @@ class TextShortcutApp(QMainWindow):
                 percent = min(100, (downloaded * 100) // total_size)
                 downloaded_mb = downloaded / (1024 * 1024)
                 total_mb = total_size / (1024 * 1024)
-                self.log_status(f"Downloading update: {percent}% ({downloaded_mb:.1f}/{total_mb:.1f} MB)")
+                self.log_status(self.tr('download_progress').format(percent, f"{downloaded_mb:.1f}", f"{total_mb:.1f}"))
 
         try:
             # Create temp directory
@@ -1362,9 +1421,9 @@ class TextShortcutApp(QMainWindow):
             installer_path = os.path.join(temp_dir, 'ezText_Setup.exe')
 
             # Download the installer with progress
-            self.log_status(f"Starting download from GitHub...")
+            self.log_status(self.tr('download_starting'))
             urllib.request.urlretrieve(download_url, installer_path, reporthook=download_progress)
-            self.log_status(f"Download completed: {installer_path}")
+            self.log_status(self.tr('download_completed').format(installer_path))
 
             # Run the installer in normal mode (not silent)
             # The installer will:
@@ -1372,14 +1431,14 @@ class TextShortcutApp(QMainWindow):
             # 2. Close ezText.exe automatically (via setup.iss code)
             # 3. Update all files
             # 4. Optionally restart the app
-            self.log_status(f"Launching installer...")
+            self.log_status(self.tr('installer_launching'))
             subprocess.Popen([installer_path])
-            self.log_status(f"Installer started. Please follow the installation wizard.")
+            self.log_status(self.tr('installer_started'))
 
             return True
 
         except Exception as e:
-            error_msg = f"Error downloading/installing update: {e}"
+            error_msg = f"{self.tr('update_error_msg')} {e}"
             self.log_status(error_msg)
             print(error_msg)
             return False
@@ -1388,19 +1447,19 @@ class TextShortcutApp(QMainWindow):
         """Handle no update available"""
         QMessageBox.information(
             self,
-            "Up to Date",
-            f"You are already using the latest version ({VERSION})."
+            self.tr('up_to_date'),
+            self.tr('up_to_date_msg').format(VERSION)
         )
-        self.log_status("No updates available")
+        self.log_status(self.tr('no_updates'))
 
     def on_update_error(self, error_msg):
         """Handle update check error"""
         QMessageBox.warning(
             self,
-            "Update Check Failed",
-            f"Could not check for updates.\n\nError: {error_msg}"
+            self.tr('update_check_failed'),
+            self.tr('update_check_failed_msg').format(error_msg)
         )
-        self.log_status("Update check failed")
+        self.log_status(f"{self.tr('update_check_failed')}: {error_msg}")
     
     def visit_github(self):
         """Visit GitHub repository"""
