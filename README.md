@@ -20,7 +20,7 @@
 1. `ezText-setup.exe` 다운로드
 2. 다운로드한 파일 실행
 3. 설치 마법사 안내에 따라 설치 진행
-   - 설치 경로: `%APPDATA%\ezText` (자동 설정)
+   - 설치 경로: `%APPDATA%\ezText`
    - 바탕화면 아이콘: 기본 활성화
 
 ### Portable 버전
@@ -55,21 +55,9 @@
 - `도움말 > 업데이트 확인` 메뉴에서 수동 확인 가능
 - 업데이트 시 설치 프로그램 자동 다운로드 및 실행
 
-## 프로젝트 구조
+## 라이선스
 
-```
-ezText/
-├── ezText.py          # 메인 프로그램
-├── updater.py         # 자동 업데이트 모듈
-├── ezText.spec        # PyInstaller 설정
-├── setup.iss          # Inno Setup 스크립트
-├── requirements.txt   # Python 의존성
-├── icon/
-│   └── ezText.ico    # 프로그램 아이콘
-└── .github/
-    └── workflows/
-        └── build-release.yml  # GitHub Actions 워크플로우
-```
+MIT License
 
 ## 지원
 

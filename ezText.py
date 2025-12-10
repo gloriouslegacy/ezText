@@ -8,14 +8,26 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QLineEdit,
                              QTableWidget, QTableWidgetItem, QHeaderView,
                              QMessageBox, QMenu, QFileDialog, QCheckBox, QSystemTrayIcon)
-from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QKeySequence, QShortcut, QPalette, QColor, QFont, QAction, QIcon
 import keyboard
 import darkdetect
 from updater import AutoUpdater
 
-# Application version
-VERSION = "1.0.0"
+# Application version - automatically set during build
+def get_version():
+    """Get application version from version.txt or default"""
+    try:
+        version_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'version.txt')
+        if os.path.exists(version_file):
+            with open(version_file, 'r', encoding='utf-8') as f:
+                return f.read().strip()
+    except Exception:
+        pass
+    # Default version for development
+    return "0.0.0"
+
+VERSION = get_version()
 
 
 class UpdateCheckThread(QThread):
@@ -63,7 +75,11 @@ class TextShortcutApp(QMainWindow):
 
         # System tray icon (will be initialized after translations)
         self.tray_icon = None
-        
+
+        # Theme tracking
+        self.current_theme = None
+        self.theme_mode = self.settings.value('theme_mode', 'auto')  # auto, light, dark
+
         # Windows system reserved shortcuts
         self.reserved_shortcuts = {
             'ctrl+c', 'ctrl+v', 'ctrl+x', 'ctrl+z', 'ctrl+y', 'ctrl+a', 
@@ -123,6 +139,11 @@ class TextShortcutApp(QMainWindow):
                 'minimize_to_tray': '트레이 아이콘으로 최소화',
                 'cancel': '취소',
                 'minimized_to_tray': '트레이 아이콘으로 최소화되었습니다. 아이콘을 더블클릭하면 복원됩니다.',
+                'shortcut_conflict_warning': '⚠️ 다른 프로그램과 단축키 충돌되지 않도록 유의하세요.',
+                'theme': '테마',
+                'theme_auto': '자동 (시스템 따라가기)',
+                'theme_light': '라이트 테마',
+                'theme_dark': '다크 테마',
                 'github_url': 'https://github.com/gloriouslegacy/ezText/releases',
             },
             'en': {
@@ -174,6 +195,11 @@ class TextShortcutApp(QMainWindow):
                 'minimize_to_tray': 'Minimize to Tray',
                 'cancel': 'Cancel',
                 'minimized_to_tray': 'Minimized to system tray. Double-click the icon to restore.',
+                'shortcut_conflict_warning': '⚠️ Be careful not to conflict with shortcuts in other programs.',
+                'theme': 'Theme',
+                'theme_auto': 'Auto (Follow System)',
+                'theme_light': 'Light Theme',
+                'theme_dark': 'Dark Theme',
                 'github_url': 'https://github.com/gloriouslegacy/ezText/releases',
             }
         }
@@ -182,6 +208,9 @@ class TextShortcutApp(QMainWindow):
         self.apply_theme()
         self.setup_tray_icon()
         self.load_shortcuts()
+
+        # Setup theme monitoring timer
+        self.setup_theme_monitor()
 
         # Check for updates on startup (silent)
         self.check_for_updates_silent()
@@ -380,7 +409,17 @@ class TextShortcutApp(QMainWindow):
         input_layout.addWidget(self.text_input, 2)
         input_layout.addWidget(shortcut_label)
         input_layout.addWidget(self.shortcut_input, 2)
-        
+
+        # Warning label
+        self.warning_label = QLabel(self.tr('shortcut_conflict_warning'))
+        self.warning_label.setFont(QFont('Segoe UI', 9))
+        self.warning_label.setWordWrap(False)
+        self.warning_label.setObjectName("warningLabel")
+        warning_layout = QHBoxLayout()
+        warning_layout.addStretch()
+        warning_layout.addWidget(self.warning_label)
+        warning_layout.addStretch()
+
         # Buttons
         button_layout = QHBoxLayout()
         
@@ -439,6 +478,7 @@ class TextShortcutApp(QMainWindow):
         
         # Add layouts to main layout
         main_layout.addLayout(input_layout)
+        main_layout.addLayout(warning_layout)
         main_layout.addLayout(button_layout)
         main_layout.addWidget(self.table)
         
@@ -504,9 +544,26 @@ class TextShortcutApp(QMainWindow):
         disable_autostart_action = QAction(self.tr('disable_autostart'), self)
         disable_autostart_action.triggered.connect(lambda: self.set_autostart(False))
         autostart_menu.addAction(disable_autostart_action)
-        
+
         settings_menu.addMenu(autostart_menu)
-        
+
+        # Theme submenu
+        theme_menu = QMenu(self.tr('theme'), self)
+
+        auto_theme_action = QAction(self.tr('theme_auto'), self)
+        auto_theme_action.triggered.connect(lambda: self.change_theme('auto'))
+        theme_menu.addAction(auto_theme_action)
+
+        light_theme_action = QAction(self.tr('theme_light'), self)
+        light_theme_action.triggered.connect(lambda: self.change_theme('light'))
+        theme_menu.addAction(light_theme_action)
+
+        dark_theme_action = QAction(self.tr('theme_dark'), self)
+        dark_theme_action.triggered.connect(lambda: self.change_theme('dark'))
+        theme_menu.addAction(dark_theme_action)
+
+        settings_menu.addMenu(theme_menu)
+
         # Help menu
         help_menu = menubar.addMenu(self.tr('help'))
         
@@ -518,9 +575,49 @@ class TextShortcutApp(QMainWindow):
         visit_github_action.triggered.connect(self.visit_github)
         help_menu.addAction(visit_github_action)
     
-    def apply_theme(self):
+    def setup_theme_monitor(self):
+        """Setup timer to monitor system theme changes"""
+        self.theme_timer = QTimer(self)
+        self.theme_timer.timeout.connect(self.check_theme_change)
+        self.theme_timer.start(1000)  # Check every 1 second
+
+    def check_theme_change(self):
+        """Check if system theme has changed and update if necessary"""
+        # Only check if in auto mode
+        if self.theme_mode != 'auto':
+            return
+
         is_dark = darkdetect.isDark()
-        
+        new_theme = 'dark' if is_dark else 'light'
+
+        if self.current_theme != new_theme:
+            self.current_theme = new_theme
+            self.apply_theme()
+
+    def change_theme(self, mode):
+        """Change theme mode (auto, light, dark)"""
+        self.theme_mode = mode
+        self.settings.setValue('theme_mode', mode)
+        self.apply_theme()
+
+        mode_names = {
+            'auto': self.tr('theme_auto'),
+            'light': self.tr('theme_light'),
+            'dark': self.tr('theme_dark')
+        }
+        self.log_status(f"Theme changed to {mode_names.get(mode, mode)}")
+
+    def apply_theme(self):
+        # Determine theme based on mode
+        if self.theme_mode == 'auto':
+            is_dark = darkdetect.isDark()
+        elif self.theme_mode == 'dark':
+            is_dark = True
+        else:  # light
+            is_dark = False
+
+        self.current_theme = 'dark' if is_dark else 'light'
+
         if is_dark:
             # Dark theme colors 
             bg_color = "#202020"
@@ -632,6 +729,11 @@ class TextShortcutApp(QMainWindow):
             QLabel {{
                 color: {text_color};
                 background-color: transparent;
+            }}
+            QLabel#warningLabel {{
+                color: #ff9800;
+                background-color: transparent;
+                padding: 5px;
             }}
             QCheckBox {{
                 color: {text_color};
@@ -1081,8 +1183,9 @@ class TextShortcutApp(QMainWindow):
         self.delete_all_button.setText(self.tr('delete_all'))
         self.select_all_button.setText(self.tr('select_all'))
         self.deselect_all_button.setText(self.tr('deselect_all'))
+        self.warning_label.setText(self.tr('shortcut_conflict_warning'))
         self.table.setHorizontalHeaderLabels(['', self.tr('text'), self.tr('shortcut')])
-        
+
         # Recreate menu bar
         self.menuBar().clear()
         self.create_menu_bar()

@@ -24,8 +24,9 @@ DefaultGroupName={#MyAppName}
 ; Output setup file
 OutputDir=dist
 OutputBaseFilename=ezText-setup
-; Icon
+; Icons
 SetupIconFile=icon\ezText.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 ; Compression
 Compression=lzma
 SolidCompression=yes
@@ -50,6 +51,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\ezText.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Icon file
 Source: "icon\ezText.ico"; DestDir: "{app}\icon"; Flags: ignoreversion
+; Version file
+Source: "version.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu shortcut

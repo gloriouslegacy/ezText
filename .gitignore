@@ -207,3 +207,6 @@ __marimo__/
 
 #etc
 settings_info.md
+
+# Version file (auto-generated during build)
+version.txt

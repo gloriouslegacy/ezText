@@ -8,6 +8,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('icon/ezText.ico', 'icon'),
+        ('version.txt', '.'),
     ],
     hiddenimports=[
         'packaging',
