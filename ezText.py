@@ -123,7 +123,7 @@ class TextShortcutApp(QMainWindow):
                 'minimize_to_tray': '트레이 아이콘으로 최소화',
                 'cancel': '취소',
                 'minimized_to_tray': '트레이 아이콘으로 최소화되었습니다. 아이콘을 더블클릭하면 복원됩니다.',
-                'github_url': 'https://github.com/gloriouslegacy/ezText',
+                'github_url': 'https://github.com/gloriouslegacy/ezText/releases',
             },
             'en': {
                 'title': 'ezText',
@@ -174,7 +174,7 @@ class TextShortcutApp(QMainWindow):
                 'minimize_to_tray': 'Minimize to Tray',
                 'cancel': 'Cancel',
                 'minimized_to_tray': 'Minimized to system tray. Double-click the icon to restore.',
-                'github_url': 'https://github.com/gloriouslegacy/ezText',
+                'github_url': 'https://github.com/gloriouslegacy/ezText/releases',
             }
         }
         

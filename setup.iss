@@ -50,8 +50,6 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\ezText.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Icon file
 Source: "icon\ezText.ico"; DestDir: "{app}\icon"; Flags: ignoreversion
-; Default config file (if exists)
-Source: "ezTextShortcut.ini"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist; Check: FileExists('ezTextShortcut.ini')
 
 [Icons]
 ; Start Menu shortcut
@@ -68,14 +66,3 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 ; Clean up config files on uninstall (optional - you might want to keep user data)
 Type: filesandordirs; Name: "{app}"
 
-[Code]
-function FileExists(const FileName: string): Boolean;
-begin
-  Result := FileOrDirExists(FileName);
-end;
-
-// Custom message for Korean
-procedure InitializeWizard();
-begin
-  // Additional initialization if needed
-end;
