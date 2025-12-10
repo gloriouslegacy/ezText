@@ -56,7 +56,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsAdminInstallMode
 
 [Files]
@@ -109,16 +109,9 @@ begin
   Result := True;
   ProcessName := 'ezText.exe';
 
-  // Check if ezText.exe is running and close it
-  if MsgBox('Please close ezText before continuing installation.' + #13#10 + #13#10 + 'Click OK to automatically close ezText and continue, or Cancel to exit.', mbConfirmation, MB_OKCANCEL) = IDOK then
-  begin
-    // Try to close the application
-    Exec('taskkill.exe', '/IM ' + ProcessName + ' /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Sleep(1500); // Wait for process to terminate
-    Result := True;
-  end
-  else
-    Result := False; // User cancelled
+  // Silently close ezText.exe if running
+  Exec('taskkill.exe', '/IM ' + ProcessName + ' /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(1500); // Wait for process to terminate
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -138,12 +131,9 @@ begin
 
   if CurUninstallStep = usUninstall then
   begin
-    // Close ezText.exe if running before uninstall
-    if MsgBox('Please close ezText before continuing uninstallation.' + #13#10 + #13#10 + 'Click OK to automatically close ezText and continue.', mbConfirmation, MB_OK) = IDOK then
-    begin
-      Exec('taskkill.exe', '/IM ' + ProcessName + ' /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-      Sleep(1500); // Wait for process to terminate
-    end;
+    // Silently close ezText.exe if running before uninstall
+    Exec('taskkill.exe', '/IM ' + ProcessName + ' /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(1500); // Wait for process to terminate
   end;
 end;
 

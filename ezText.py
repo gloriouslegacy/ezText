@@ -206,9 +206,11 @@ class TextShortcutApp(QMainWindow):
         }
         
         self.init_ui()
-        self.apply_theme()
         self.setup_tray_icon()
         self.load_shortcuts()
+
+        # Apply theme after UI is fully initialized
+        self.apply_theme()
 
         # Setup theme monitoring timer
         self.setup_theme_monitor()
@@ -304,7 +306,8 @@ class TextShortcutApp(QMainWindow):
         # Don't disable, just style it to look inactive
         is_dark = darkdetect.isDark()
         inactive_bg = "#1a1a1a" if is_dark else "#e0e0e0"
-        self.shortcut_input.setStyleSheet(f"QLineEdit {{ background-color: {inactive_bg}; }}")
+        inactive_text = "#888888" if is_dark else "#666666"
+        self.shortcut_input.setStyleSheet(f"QLineEdit {{ background-color: {inactive_bg}; color: {inactive_text}; }}")
         QLineEdit.focusInEvent(self.text_input, event)
     
     def on_text_input_focus_out(self, event):
@@ -335,7 +338,8 @@ class TextShortcutApp(QMainWindow):
         # Don't disable, just style it to look inactive
         is_dark = darkdetect.isDark()
         inactive_bg = "#1a1a1a" if is_dark else "#e0e0e0"
-        self.text_input.setStyleSheet(f"QLineEdit {{ background-color: {inactive_bg}; }}")
+        inactive_text = "#888888" if is_dark else "#666666"
+        self.text_input.setStyleSheet(f"QLineEdit {{ background-color: {inactive_bg}; color: {inactive_text}; }}")
         QLineEdit.focusInEvent(self.shortcut_input, event)
     
     def on_shortcut_input_focus_out(self, event):
@@ -1343,14 +1347,24 @@ class TextShortcutApp(QMainWindow):
         import tempfile
         import urllib.request
 
+        def download_progress(block_count, block_size, total_size):
+            """Show download progress"""
+            if total_size > 0:
+                downloaded = block_count * block_size
+                percent = min(100, (downloaded * 100) // total_size)
+                downloaded_mb = downloaded / (1024 * 1024)
+                total_mb = total_size / (1024 * 1024)
+                self.log_status(f"Downloading update: {percent}% ({downloaded_mb:.1f}/{total_mb:.1f} MB)")
+
         try:
             # Create temp directory
             temp_dir = tempfile.gettempdir()
             installer_path = os.path.join(temp_dir, 'ezText_Setup.exe')
 
-            # Download the installer
-            print(f"Downloading update from {download_url}...")
-            urllib.request.urlretrieve(download_url, installer_path)
+            # Download the installer with progress
+            self.log_status(f"Starting download from GitHub...")
+            urllib.request.urlretrieve(download_url, installer_path, reporthook=download_progress)
+            self.log_status(f"Download completed: {installer_path}")
 
             # Run the installer in normal mode (not silent)
             # The installer will:
@@ -1358,13 +1372,16 @@ class TextShortcutApp(QMainWindow):
             # 2. Close ezText.exe automatically (via setup.iss code)
             # 3. Update all files
             # 4. Optionally restart the app
-            print(f"Running installer: {installer_path}")
+            self.log_status(f"Launching installer...")
             subprocess.Popen([installer_path])
+            self.log_status(f"Installer started. Please follow the installation wizard.")
 
             return True
 
         except Exception as e:
-            print(f"Error downloading/installing update: {e}")
+            error_msg = f"Error downloading/installing update: {e}"
+            self.log_status(error_msg)
+            print(error_msg)
             return False
 
     def on_no_update(self):
