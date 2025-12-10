@@ -1,0 +1,2 @@
+# ezText
+test Shortcut
