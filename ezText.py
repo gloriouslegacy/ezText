@@ -373,10 +373,8 @@ class TextShortcutApp(QMainWindow):
             self.log_status(self.tr('empty_fields'))
             return
 
-        # Only allow if text input is not focused
-        if self.text_input.hasFocus():
-            # If text input has focus, clear it first
-            self.text_input.clearFocus()
+        # Clear previous shortcut input before starting new recording
+        self.shortcut_input.clear()
 
         # Call original mouse press to set focus
         self.original_shortcut_mouse_press(event)
@@ -393,8 +391,23 @@ class TextShortcutApp(QMainWindow):
         QLineEdit.focusInEvent(self.shortcut_input, event)
     
     def on_shortcut_input_focus_out(self, event):
-        """Handle shortcut input focus out - restore text input styling"""
+        """Handle shortcut input focus out - stop recording and reset"""
+        # Stop any active keyboard recording
+        keyboard.unhook_all()
+
+        # Only clear if focus is moving to text input (not to add button or other widgets)
+        # This prevents clearing when user clicks the Add button
+        focused_widget = QApplication.focusWidget()
+        if focused_widget == self.text_input:
+            # Clear shortcut input field only when moving to text input
+            self.shortcut_input.clear()
+
+        # Restore text input styling
         self.text_input.setStyleSheet("")
+
+        # Restore shortcut input styling
+        self.shortcut_input.setStyleSheet("")
+
         QLineEdit.focusOutEvent(self.shortcut_input, event)
     
     def init_ui(self):
@@ -595,18 +608,12 @@ class TextShortcutApp(QMainWindow):
         
         settings_menu.addMenu(language_menu)
         
-        # Autostart submenu
-        autostart_menu = QMenu(self.tr('autostart'), self)
-        
-        enable_autostart_action = QAction(self.tr('enable_autostart'), self)
-        enable_autostart_action.triggered.connect(lambda: self.set_autostart(True))
-        autostart_menu.addAction(enable_autostart_action)
-        
-        disable_autostart_action = QAction(self.tr('disable_autostart'), self)
-        disable_autostart_action.triggered.connect(lambda: self.set_autostart(False))
-        autostart_menu.addAction(disable_autostart_action)
-
-        settings_menu.addMenu(autostart_menu)
+        # Autostart checkbox action
+        self.autostart_action = QAction(self.tr('enable_autostart'), self)
+        self.autostart_action.setCheckable(True)
+        self.autostart_action.setChecked(self.is_autostart_enabled())
+        self.autostart_action.triggered.connect(self.toggle_autostart)
+        settings_menu.addAction(self.autostart_action)
 
         # Theme submenu
         theme_menu = QMenu(self.tr('theme'), self)
@@ -1257,22 +1264,46 @@ class TextShortcutApp(QMainWindow):
         self.menuBar().clear()
         self.create_menu_bar()
     
+    def is_autostart_enabled(self):
+        """Check if autostart is currently enabled"""
+        try:
+            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+            app_name = "TextShortcutApp"
+
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
+            try:
+                winreg.QueryValueEx(key, app_name)
+                winreg.CloseKey(key)
+                return True
+            except FileNotFoundError:
+                winreg.CloseKey(key)
+                return False
+        except Exception:
+            return False
+
+    def toggle_autostart(self):
+        """Toggle autostart on/off"""
+        current_state = self.is_autostart_enabled()
+        self.set_autostart(not current_state)
+        # Update checkbox state
+        self.autostart_action.setChecked(not current_state)
+
     def set_autostart(self, enable):
         """Enable or disable autostart on Windows login"""
         try:
             key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
             app_name = "TextShortcutApp"
             app_path = os.path.abspath(sys.argv[0])
-            
+
             # If running as .py file, use pythonw.exe to run without console
             if app_path.endswith('.py'):
                 python_path = sys.executable.replace('python.exe', 'pythonw.exe')
                 app_path = f'"{python_path}" "{app_path}"'
             else:
                 app_path = f'"{app_path}"'
-            
+
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
-            
+
             if enable:
                 winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, app_path)
                 self.settings.setValue('autostart', True)
@@ -1284,7 +1315,7 @@ class TextShortcutApp(QMainWindow):
                     self.log_status(self.tr('autostart_disabled'))
                 except FileNotFoundError:
                     pass
-            
+
             winreg.CloseKey(key)
         except Exception as e:
             self.log_status(f"{self.tr('error')}: {str(e)}")
@@ -1491,9 +1522,9 @@ class TextShortcutApp(QMainWindow):
         msg_box.setText(self.tr('exit_message'))
         msg_box.setIcon(QMessageBox.Icon.Question)
         
-        # Add custom buttons
-        exit_button = msg_box.addButton(self.tr('exit_button'), QMessageBox.ButtonRole.AcceptRole)
+        # Add custom buttons (order: Tray, Exit, Cancel)
         tray_button = msg_box.addButton(self.tr('minimize_to_tray'), QMessageBox.ButtonRole.ActionRole)
+        exit_button = msg_box.addButton(self.tr('exit_button'), QMessageBox.ButtonRole.AcceptRole)
         cancel_button = msg_box.addButton(self.tr('cancel'), QMessageBox.ButtonRole.RejectRole)
         
         msg_box.exec()
