@@ -3,6 +3,7 @@ import os
 import configparser
 import winreg
 import webbrowser
+import subprocess
 from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QLineEdit,
@@ -313,11 +314,17 @@ class TextShortcutApp(QMainWindow):
     
     def on_shortcut_mouse_press(self, event):
         """Handle shortcut input mouse press"""
+        # Check if text input has any text
+        if not self.text_input.text().strip():
+            # Show warning if text is empty
+            self.log_status(self.tr('empty_fields'))
+            return
+
         # Only allow if text input is not focused
         if self.text_input.hasFocus():
             # If text input has focus, clear it first
             self.text_input.clearFocus()
-        
+
         # Call original mouse press to set focus
         self.original_shortcut_mouse_press(event)
         # Then start recording shortcut
@@ -859,14 +866,19 @@ class TextShortcutApp(QMainWindow):
         
         # Register hotkey
         self.register_hotkey(shortcut, text)
-        
-        # Clear inputs
+
+        # Clear inputs and reset focus
         self.text_input.clear()
         self.shortcut_input.clear()
-        
+        # Clear focus from shortcut input to reset its state
+        if self.shortcut_input.hasFocus():
+            self.shortcut_input.clearFocus()
+        # Reset styling to default
+        self.shortcut_input.setStyleSheet("")
+
         # Auto save
         self.save_shortcuts(silent=True)
-        
+
         # Log status
         self.log_status(self.tr('shortcut_added').format(shortcut))
     
@@ -1223,20 +1235,57 @@ class TextShortcutApp(QMainWindow):
             self.log_status(f"{self.tr('error')}: {str(e)}")
     
     def check_for_updates_silent(self):
-        """Check for updates silently on startup"""
+        """Check for updates automatically on startup"""
         self.update_thread = UpdateCheckThread(self.updater)
-        self.update_thread.update_available.connect(self.on_update_available_silent)
+        self.update_thread.update_available.connect(self.on_update_available_auto)
         self.update_thread.start()
 
-    def on_update_available_silent(self, release_info):
-        """Handle update available (silent check on startup)"""
+    def on_update_available_auto(self, release_info):
+        """Handle update available (automatic update on startup)"""
+        # Show notification that update is being downloaded
         if self.tray_icon:
             self.tray_icon.showMessage(
                 self.tr('title'),
-                f"New version {release_info['version']} is available!",
+                f"New version {release_info['version']} is available! Downloading update...",
                 QSystemTrayIcon.MessageIcon.Information,
                 5000
             )
+
+        # Automatically download and run installer
+        if release_info['download_url']:
+            self.log_status(f"Auto-updating to version {release_info['version']}...")
+            success = self.download_and_run_installer(release_info['download_url'])
+
+            if success:
+                # Show message that installer is running
+                if self.tray_icon:
+                    self.tray_icon.showMessage(
+                        self.tr('title'),
+                        "Update downloaded. Installer will open automatically.",
+                        QSystemTrayIcon.MessageIcon.Information,
+                        3000
+                    )
+                self.log_status("Update installer launched")
+            else:
+                # Show error notification
+                if self.tray_icon:
+                    self.tray_icon.showMessage(
+                        self.tr('title'),
+                        "Failed to download update. Please update manually from Help menu.",
+                        QSystemTrayIcon.MessageIcon.Warning,
+                        5000
+                    )
+                self.log_status("Auto-update failed")
+        else:
+            # No download URL - open releases page
+            if self.tray_icon:
+                self.tray_icon.showMessage(
+                    self.tr('title'),
+                    f"New version {release_info['version']} is available! Click to download.",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    5000
+                )
+            webbrowser.open(release_info['html_url'])
 
     def check_for_updates(self):
         """Check for updates manually from menu"""
@@ -1262,20 +1311,61 @@ class TextShortcutApp(QMainWindow):
         if result == QMessageBox.StandardButton.Yes:
             if release_info['download_url']:
                 self.log_status("Downloading update...")
-                success = self.updater.download_and_install(release_info['download_url'])
+
+                # Setup version: Download and run installer directly (no updater.exe)
+                # The installer will handle closing the app and updating files
+                success = self.download_and_run_installer(release_info['download_url'])
+
                 if success:
                     QMessageBox.information(
                         self,
                         "Update",
-                        "Update downloaded. The installer will run now.\nPlease close this application to complete the update."
+                        "Update downloaded successfully!\n\nThe installer will open now.\nPlease follow the installation wizard."
                     )
-                    # Exit to allow installer to run
-                    self.exit_app()
+                    # Don't exit here - let the installer close us
                 else:
                     QMessageBox.warning(self, "Update Error", "Failed to download update.")
             else:
                 # Open releases page if no direct download
                 webbrowser.open(release_info['html_url'])
+
+    def download_and_run_installer(self, download_url):
+        """
+        Download and run installer directly (for setup version only)
+        Does not use updater.exe - installer handles everything
+
+        Args:
+            download_url: URL to download the installer
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        import tempfile
+        import urllib.request
+
+        try:
+            # Create temp directory
+            temp_dir = tempfile.gettempdir()
+            installer_path = os.path.join(temp_dir, 'ezText_Setup.exe')
+
+            # Download the installer
+            print(f"Downloading update from {download_url}...")
+            urllib.request.urlretrieve(download_url, installer_path)
+
+            # Run the installer in normal mode (not silent)
+            # The installer will:
+            # 1. Show installation wizard to user
+            # 2. Close ezText.exe automatically (via setup.iss code)
+            # 3. Update all files
+            # 4. Optionally restart the app
+            print(f"Running installer: {installer_path}")
+            subprocess.Popen([installer_path])
+
+            return True
+
+        except Exception as e:
+            print(f"Error downloading/installing update: {e}")
+            return False
 
     def on_no_update(self):
         """Handle no update available"""

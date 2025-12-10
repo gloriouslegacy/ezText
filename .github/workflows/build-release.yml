@@ -3,73 +3,285 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'  # Trigger on version tags like v1.0.0
-
-permissions:
-  contents: write
+      - "v*"
 
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
-    - name: Extract version from tag
-      id: get_version
-      run: |
-        $version = "${{ github.ref_name }}" -replace '^v', ''
-        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-        echo "VERSION=$version" | Out-File -FilePath version.txt -Encoding utf8 -NoNewline
-      shell: powershell
+      # Determine version from tags
+      - name: Determine version
+        id: vars
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            base_version="${GITHUB_REF#refs/tags/v}"
+            version="$base_version"
+            release_name="$base_version"
+          else
+            version="0.0.0-dev-$(date +%Y%m%d)"
+            base_version="0.0.0-dev"
+            release_name="$version"
+          fi
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "base_version=$base_version" >> $GITHUB_OUTPUT
+          echo "release_name=$release_name" >> $GITHUB_OUTPUT
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
+      # Verify icon files exist
+      - name: Verify icon files
+        shell: pwsh
+        run: |
+          Write-Host "=== Icon Files Check ==="
+          if (Test-Path "./icon/ezText.ico") {
+            Write-Host "✓ ezText.ico found"
+            $iconSize = (Get-Item "./icon/ezText.ico").Length
+            Write-Host "  Size: $iconSize bytes"
+          } else {
+            Write-Host "✗ ezText.ico NOT found"
+            exit 1
+          }
 
-    - name: Build executable with PyInstaller
-      run: |
-        pyinstaller ezText.spec
+      # Install Python dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          if (Test-Path "requirements.txt") {
+            pip install -r requirements.txt
+          }
+        shell: pwsh
 
-    - name: Install Inno Setup
-      run: |
-        choco install innosetup -y
+      # Inject version into version.txt
+      - name: Create version.txt
+        shell: pwsh
+        run: |
+          $version = "${{ steps.vars.outputs.version }}"
+          Write-Host "Creating version.txt with version: $version"
+          $version | Out-File -FilePath "version.txt" -Encoding utf8 -NoNewline
+          Write-Host "✓ version.txt created"
 
-    - name: Update Inno Setup version
-      run: |
-        $version = "${{ steps.get_version.outputs.VERSION }}"
-        (Get-Content setup.iss) -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$version`"" | Set-Content setup.iss
-      shell: powershell
+      # Build executable
+      - name: Build Executable
+        shell: pwsh
+        run: |
+          Write-Host "=== Building ezText Executable ==="
 
-    - name: Build installer with Inno Setup
-      run: |
-        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
-      shell: powershell
+          $iconPath = "icon/ezText.ico"
+          Write-Host "Icon path: $iconPath"
+          Write-Host "Icon exists: $(Test-Path $iconPath)"
 
-    - name: Create Release and Upload Assets
-      uses: softprops/action-gh-release@v2
-      with:
-        name: ezText ${{ steps.get_version.outputs.VERSION }}
-        body: |
-          ## Changes in this release
-          - Auto-update functionality
-          - Installer for easy installation
+          # Build with PyInstaller spec file
+          pyinstaller ezText.spec
 
-          ## Installation
-          Download `ezText-setup.exe` and run it to install ezText.
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "✗ Build failed with exit code $LASTEXITCODE"
+            exit 1
+          }
 
-          ## Update
-          The application will automatically check for updates on startup.
-        files: |
-          dist/ezText-setup.exe
-          dist/ezText.exe
-        draft: false
-        prerelease: false
+          Write-Host "✓ Build completed"
+
+          # Verify build output (onedir build)
+          if (Test-Path "dist/ezText/ezText.exe") {
+            $size = (Get-Item "dist/ezText/ezText.exe").Length
+            Write-Host "✓ EXE created: $($size / 1MB) MB"
+
+            Write-Host "`n=== Build Contents ==="
+            Get-ChildItem "dist/ezText" -Recurse | Format-Table Name, Length
+          } else {
+            Write-Host "✗ ezText.exe NOT found in dist/ezText/"
+            exit 1
+          }
+
+      # Install Inno Setup
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          Write-Host "=== Installing Inno Setup ==="
+
+          # Download Inno Setup
+          $innoUrl = "https://jrsoftware.org/download.php/is.exe"
+          $innoInstaller = "innosetup-installer.exe"
+
+          Write-Host "Downloading Inno Setup..."
+          Invoke-WebRequest -Uri $innoUrl -OutFile $innoInstaller
+
+          # Install silently
+          Write-Host "Installing Inno Setup..."
+          Start-Process -FilePath $innoInstaller -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
+
+          # Verify installation
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (Test-Path $isccPath) {
+            Write-Host "✓ Inno Setup installed successfully"
+          } else {
+            Write-Host "✗ Inno Setup installation failed"
+            exit 1
+          }
+
+      # Create Installer
+      - name: Create Setup Installer
+        shell: pwsh
+        run: |
+          Write-Host "=== Creating Setup Installer ==="
+
+          # Set environment variable for Inno Setup
+          $version = "${{ steps.vars.outputs.version }}"
+          $versionClean = $version -replace '-.*',''
+          [Environment]::SetEnvironmentVariable("EZTEXT_VERSION", $versionClean, "Process")
+
+          Write-Host "Version: $versionClean"
+
+          # Verify ISS file exists
+          if (-not (Test-Path "setup.iss")) {
+            Write-Host "✗ setup.iss not found"
+            exit 1
+          }
+
+          # Verify build output exists (onedir build)
+          if (-not (Test-Path "dist/ezText/ezText.exe")) {
+            Write-Host "✗ dist/ezText/ezText.exe not found"
+            exit 1
+          }
+
+          # Verify _internal folder exists
+          if (-not (Test-Path "dist/ezText/_internal")) {
+            Write-Host "✗ dist/ezText/_internal folder not found"
+            exit 1
+          }
+
+          # Compile with Inno Setup
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          Write-Host "Compiling installer..."
+          & $isccPath "setup.iss"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "✗ Inno Setup compilation failed"
+            exit 1
+          }
+
+          Write-Host "✓ Compilation completed successfully"
+
+          # Find setup file
+          $setupFile = Get-ChildItem "installer_output" -Filter "ezText_Setup_*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+          if ($setupFile) {
+            $size = $setupFile.Length / 1MB
+            Write-Host "✓ Setup file created: $($setupFile.Name)"
+            Write-Host "  Size: $([math]::Round($size, 2)) MB"
+          } else {
+            Write-Host "✗ Setup file not found in installer_output"
+            exit 1
+          }
+
+      # Verify built executable
+      - name: Verify Built Executable
+        shell: pwsh
+        run: |
+          Write-Host "=== Verifying Built Executable ==="
+
+          if (Test-Path "dist/ezText/ezText.exe") {
+            $exeSize = (Get-Item "dist/ezText/ezText.exe").Length
+            Write-Host "✓ EXE: $($exeSize / 1MB) MB"
+
+            try {
+              Add-Type -AssemblyName System.Drawing
+              $icon = [System.Drawing.Icon]::ExtractAssociatedIcon("$PWD\dist\ezText\ezText.exe")
+              if ($icon) {
+                Write-Host "✓ Icon verified: $($icon.Width)x$($icon.Height)"
+                $icon.Dispose()
+              }
+            } catch {
+              Write-Host "⚠ Could not verify icon"
+            }
+
+            # Verify icon folder if exists
+            if (Test-Path "dist/ezText/icon/ezText.ico") {
+              Write-Host "✓ Icon folder found"
+            }
+
+            # Verify _internal folder
+            if (Test-Path "dist/ezText/_internal") {
+              $internalCount = (Get-ChildItem "dist/ezText/_internal" -Recurse).Count
+              Write-Host "✓ _internal folder found with $internalCount files"
+            } else {
+              Write-Host "✗ _internal folder not found"
+              exit 1
+            }
+          } else {
+            Write-Host "✗ EXE not found"
+            exit 1
+          }
+
+      # Generate file hashes
+      - name: Generate File Hashes
+        shell: pwsh
+        run: |
+          Write-Host "=== File Hashes ==="
+
+          $exeHash = Get-FileHash -Path "dist/ezText/ezText.exe" -Algorithm SHA256
+          Write-Host "EXE SHA256: $($exeHash.Hash)"
+
+          $setupFile = Get-ChildItem "installer_output" -Filter "ezText_Setup_*.exe" | Select-Object -First 1
+          if ($setupFile) {
+            $setupHash = Get-FileHash -Path $setupFile.FullName -Algorithm SHA256
+            Write-Host "Setup SHA256: $($setupHash.Hash)"
+
+            # Save hashes to environment
+            "EXE_SHA256=$($exeHash.Hash)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            "SETUP_SHA256=$($setupHash.Hash)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          }
+
+      # Prepare release package
+      - name: Prepare Release Package
+        shell: pwsh
+        run: |
+          Write-Host "=== Preparing Release Package ==="
+
+          # Find and copy setup file
+          $setupFile = Get-ChildItem "installer_output" -Filter "ezText_Setup_*.exe" | Select-Object -First 1
+          if ($setupFile) {
+            Copy-Item $setupFile.FullName -Destination "ezText_Setup.exe"
+            Write-Host "✓ Setup file copied: ezText_Setup.exe"
+          }
+
+      # Create GitHub Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.vars.outputs.base_version }}
+          name: Release ${{ steps.vars.outputs.release_name }}
+          body: |
+            # 📦 ezText v${{ steps.vars.outputs.release_name }}
+
+            Simple and powerful text shortcut automation tool.
+
+            ## 📥 Download
+
+            - **ezText_Setup.exe** - Installer (installs to %APPDATA%\ezText)
+
+            ## 🔐 File Verification (SHA256)
+
+            **Setup Installer (EXE)**
+            ```
+            ${{ env.SETUP_SHA256 }}
+            ```
+
+            ## 📝 Changelog
+            See commit history for detailed changes.
+
+          files: |
+            ezText_Setup.exe
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

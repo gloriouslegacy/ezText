@@ -1,3 +1,26 @@
+"""
+ezText Auto-Updater
+
+IMPORTANT: This updater is for PORTABLE VERSION ONLY.
+
+For Setup/Installer version:
+- Updates are handled directly by ezText.py
+- Downloads installer and runs it in normal mode (shows installation wizard)
+- Installer handles closing the app and updating files automatically
+- Does NOT use this updater.py
+
+For Portable version:
+- Would use this updater to replace files after download
+- Currently ezText only supports Setup version
+
+Update Process (Setup version):
+1. Auto-check on startup
+2. Auto-download if update available
+3. Show installer wizard to user
+4. Installer closes app automatically (via setup.iss)
+5. User completes installation
+"""
+
 import sys
 import os
 import json
@@ -70,17 +93,32 @@ class AutoUpdater:
         """
         assets = release_data.get('assets', [])
 
-        # Look for the setup executable
+        # Look for the setup executable (case-insensitive)
         for asset in assets:
             name = asset['name'].lower()
-            if name.endswith('-setup.exe') or name.startswith('eztext') and name.endswith('.exe'):
+            # Match any of these patterns:
+            # - ezText_Setup.exe
+            # - eztext_setup.exe (case insensitive)
+            # - Any .exe file containing 'setup'
+            if 'setup' in name and name.endswith('.exe'):
                 return asset['browser_download_url']
 
         return None
 
     def download_and_install(self, download_url, silent=False):
         """
-        Download and install the update
+        Download and install the update (LEGACY - NOT USED)
+
+        NOTE: This function is kept for backward compatibility but is no longer used.
+        Setup version updates are now handled directly by ezText.py without using updater.
+
+        For setup version updates, ezText.py:
+        1. Auto-checks for updates on startup
+        2. Downloads installer directly if update available
+        3. Runs installer in normal mode (no silent flags) - shows wizard to user
+        4. Installer closes the app automatically via setup.iss code
+        5. User completes installation through wizard
+        6. Installer updates all files
 
         Args:
             download_url: URL to download the installer
@@ -92,7 +130,7 @@ class AutoUpdater:
         try:
             # Create temp directory
             temp_dir = tempfile.gettempdir()
-            installer_path = os.path.join(temp_dir, 'ezText-setup.exe')
+            installer_path = os.path.join(temp_dir, 'ezText_Setup.exe')
 
             # Download the installer
             print(f"Downloading update from {download_url}...")
