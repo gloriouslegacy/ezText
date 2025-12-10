@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'  # Trigger on version tags like v1.0.0
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -37,19 +40,10 @@ jobs:
         & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
       shell: powershell
 
-    - name: Get version from tag
-      id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-      shell: bash
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create Release and Upload Assets
+      uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ github.ref }}
-        release_name: ezText ${{ steps.get_version.outputs.VERSION }}
+        name: ezText ${{ github.ref_name }}
         body: |
           ## Changes in this release
           - Auto-update functionality
@@ -60,25 +54,8 @@ jobs:
 
           ## Update
           The application will automatically check for updates on startup.
+        files: |
+          dist/ezText-setup.exe
+          dist/ezText.exe
         draft: false
         prerelease: false
-
-    - name: Upload Release Asset - Installer
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dist/ezText-setup.exe
-        asset_name: ezText-setup.exe
-        asset_content_type: application/octet-stream
-
-    - name: Upload Release Asset - Standalone EXE
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dist/ezText.exe
-        asset_name: ezText.exe
-        asset_content_type: application/octet-stream
