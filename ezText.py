@@ -71,9 +71,27 @@ class TextShortcutApp(QMainWindow):
         # Load saved language or default to Korean
         self.current_language = self.settings.value('language', 'ko')
 
-        # Get the directory where the script is located
+        # Get the directory where the script is located (for reference)
         self.script_dir = os.path.dirname(os.path.abspath(__file__))
-        default_config = os.path.join(self.script_dir, 'ezTextShortcut.ini')
+
+        # Use %localAppData%\ezText\ for config file to persist across updates
+        local_app_data = os.environ.get('LOCALAPPDATA', os.path.expanduser('~\\AppData\\Local'))
+        self.config_dir = os.path.join(local_app_data, 'ezText')
+
+        # Create config directory if it doesn't exist
+        if not os.path.exists(self.config_dir):
+            os.makedirs(self.config_dir, exist_ok=True)
+
+        default_config = os.path.join(self.config_dir, 'ezTextShortcut.ini')
+
+        # Migration: Check for old config file in script directory and move it
+        old_config = os.path.join(self.script_dir, 'ezTextShortcut.ini')
+        if os.path.exists(old_config) and not os.path.exists(default_config):
+            try:
+                import shutil
+                shutil.copy2(old_config, default_config)
+            except Exception:
+                pass  # If migration fails, just use the new location
 
         # Load last opened file or use default
         last_file = self.settings.value('last_file', default_config)
@@ -361,7 +379,7 @@ class TextShortcutApp(QMainWindow):
             self.table.setRowCount(0)
 
             # Reset to default config file
-            default_config = os.path.join(self.script_dir, 'ezTextShortcut.ini')
+            default_config = os.path.join(self.config_dir, 'ezTextShortcut.ini')
             self.config_file = default_config
 
             self.log_status("New file created")
