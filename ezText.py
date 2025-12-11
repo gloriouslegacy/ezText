@@ -71,12 +71,16 @@ class TextShortcutApp(QMainWindow):
         # Load saved language or default to Korean
         self.current_language = self.settings.value('language', 'ko')
 
+        # Get the directory where the script is located
+        self.script_dir = os.path.dirname(os.path.abspath(__file__))
+        default_config = os.path.join(self.script_dir, 'ezTextShortcut.ini')
+
         # Load last opened file or use default
-        last_file = self.settings.value('last_file', 'ezTextShortcut.ini')
+        last_file = self.settings.value('last_file', default_config)
         # If last file doesn't exist, fall back to default
         if not os.path.exists(last_file):
-            self.config_file = 'ezTextShortcut.ini'
-            self.settings.setValue('last_file', 'ezTextShortcut.ini')
+            self.config_file = default_config
+            self.settings.setValue('last_file', default_config)
         else:
             self.config_file = last_file
         self.shortcuts_dict = {}
@@ -355,10 +359,11 @@ class TextShortcutApp(QMainWindow):
             
             self.shortcuts_dict.clear()
             self.table.setRowCount(0)
-            
+
             # Reset to default config file
-            self.config_file = 'ezTextShortcut.ini'
-            
+            default_config = os.path.join(self.script_dir, 'ezTextShortcut.ini')
+            self.config_file = default_config
+
             self.log_status("New file created")
     
     def on_text_mouse_press(self, event):
