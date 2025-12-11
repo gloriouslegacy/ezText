@@ -70,7 +70,13 @@ class TextShortcutApp(QMainWindow):
         self.current_language = self.settings.value('language', 'ko')
 
         # Load last opened file or use default
-        self.config_file = self.settings.value('last_file', 'ezTextShortcut.ini')
+        last_file = self.settings.value('last_file', 'ezTextShortcut.ini')
+        # If last file doesn't exist, fall back to default
+        if not os.path.exists(last_file):
+            self.config_file = 'ezTextShortcut.ini'
+            self.settings.setValue('last_file', 'ezTextShortcut.ini')
+        else:
+            self.config_file = last_file
         self.shortcuts_dict = {}
         self.active_shortcuts = []
 
@@ -104,6 +110,8 @@ class TextShortcutApp(QMainWindow):
                 'save': '저장',
                 'save_as': '다른 이름으로 저장',
                 'load': '불러오기',
+                'restart': '재시작',
+                'restart_program': '프로그램 재시작',
                 'exit': '종료',
                 'language': '언어',
                 'autostart': '자동 실행',
@@ -185,6 +193,8 @@ class TextShortcutApp(QMainWindow):
                 'save': 'Save',
                 'save_as': 'Save As',
                 'load': 'Load',
+                'restart': 'Restart',
+                'restart_program': 'Restart Program',
                 'exit': 'Exit',
                 'language': 'Language',
                 'autostart': 'Auto Start',
@@ -526,13 +536,20 @@ class TextShortcutApp(QMainWindow):
         self.deselect_all_button.setMinimumHeight(35)
         self.deselect_all_button.clicked.connect(self.deselect_all)
         self.deselect_all_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        
+
+        self.restart_button = QPushButton(self.tr('restart_program'))
+        self.restart_button.setFont(QFont('Segoe UI', 10))
+        self.restart_button.setMinimumHeight(35)
+        self.restart_button.clicked.connect(self.restart_program)
+        self.restart_button.setCursor(Qt.CursorShape.PointingHandCursor)
+
         button_layout.addWidget(self.add_button)
         button_layout.addWidget(self.delete_button)
         button_layout.addWidget(self.delete_all_button)
         button_layout.addWidget(self.select_all_button)
         button_layout.addWidget(self.deselect_all_button)
         button_layout.addStretch()
+        button_layout.addWidget(self.restart_button)
         
         # Table
         self.table = QTableWidget()
@@ -584,9 +601,14 @@ class TextShortcutApp(QMainWindow):
         load_action.setShortcut('Ctrl+O')
         load_action.triggered.connect(self.load_shortcuts_dialog)
         file_menu.addAction(load_action)
-        
+
         file_menu.addSeparator()
-        
+
+        restart_action = QAction(self.tr('restart'), self)
+        restart_action.setShortcut('Ctrl+R')
+        restart_action.triggered.connect(self.restart_program)
+        file_menu.addAction(restart_action)
+
         exit_action = QAction(self.tr('exit'), self)
         exit_action.setShortcut('Ctrl+Q')
         exit_action.triggered.connect(self.close)
@@ -1177,9 +1199,13 @@ class TextShortcutApp(QMainWindow):
     
     def load_shortcuts(self):
         """Load shortcuts from ini file"""
+        # If config file doesn't exist, create an empty one
         if not os.path.exists(self.config_file):
+            config = configparser.ConfigParser()
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                config.write(f)
             return
-        
+
         config = configparser.ConfigParser()
         config.read(self.config_file, encoding='utf-8')
         
@@ -1257,6 +1283,7 @@ class TextShortcutApp(QMainWindow):
         self.delete_all_button.setText(self.tr('delete_all'))
         self.select_all_button.setText(self.tr('select_all'))
         self.deselect_all_button.setText(self.tr('deselect_all'))
+        self.restart_button.setText(self.tr('restart_program'))
         self.warning_label.setText(self.tr('shortcut_conflict_warning'))
         self.table.setHorizontalHeaderLabels(['', self.tr('text'), self.tr('shortcut')])
 
@@ -1513,7 +1540,29 @@ class TextShortcutApp(QMainWindow):
         
         # Quit application
         QApplication.quit()
-    
+
+    def restart_program(self):
+        """Restart the program"""
+        try:
+            # Save current shortcuts before restart
+            self.save_shortcuts(silent=True)
+
+            # Get the current executable path
+            python = sys.executable
+
+            # Close the current application
+            self.tray_icon.hide()
+
+            # Restart using the same executable and arguments
+            if getattr(sys, 'frozen', False):
+                # Running as compiled executable
+                os.execl(sys.executable, sys.executable)
+            else:
+                # Running as Python script
+                os.execl(python, python, *sys.argv)
+        except Exception as e:
+            QMessageBox.critical(self, self.tr('error'), f"Restart failed: {str(e)}")
+
     def closeEvent(self, event):
         """Handle window close event"""
         # Create custom message box
