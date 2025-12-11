@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QMessageBox, QMenu, QFileDialog, QCheckBox, QSystemTrayIcon)
 from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QKeySequence, QShortcut, QPalette, QColor, QFont, QAction, QIcon
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 import keyboard
 import darkdetect
 from updater import AutoUpdater
@@ -82,6 +83,13 @@ class TextShortcutApp(QMainWindow):
 
         # System tray icon (will be initialized after translations)
         self.tray_icon = None
+
+        # Single instance server
+        self.server = QLocalServer(self)
+        self.server.newConnection.connect(self.handle_new_connection)
+        # Remove any existing server with the same name
+        QLocalServer.removeServer('ezText_SingleInstance')
+        self.server.listen('ezText_SingleInstance')
 
         # Theme tracking
         self.current_theme = None
@@ -488,11 +496,19 @@ class TextShortcutApp(QMainWindow):
         self.shortcut_input.mousePressEvent = self.on_shortcut_mouse_press
         self.shortcut_input.focusInEvent = self.on_shortcut_input_focus
         self.shortcut_input.focusOutEvent = self.on_shortcut_input_focus_out
-        
+
+        # Add button (create early to add to input layout)
+        self.add_button = QPushButton(self.tr('add'))
+        self.add_button.setFont(QFont('Segoe UI', 10))
+        self.add_button.setMinimumHeight(35)
+        self.add_button.clicked.connect(self.add_shortcut)
+        self.add_button.setCursor(Qt.CursorShape.PointingHandCursor)
+
         input_layout.addWidget(text_label)
         input_layout.addWidget(self.text_input, 2)
         input_layout.addWidget(shortcut_label)
         input_layout.addWidget(self.shortcut_input, 2)
+        input_layout.addWidget(self.add_button)
 
         # Warning label
         self.warning_label = QLabel(self.tr('shortcut_conflict_warning'))
@@ -506,13 +522,7 @@ class TextShortcutApp(QMainWindow):
 
         # Buttons
         button_layout = QHBoxLayout()
-        
-        self.add_button = QPushButton(self.tr('add'))
-        self.add_button.setFont(QFont('Segoe UI', 10))
-        self.add_button.setMinimumHeight(35)
-        self.add_button.clicked.connect(self.add_shortcut)
-        self.add_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        
+
         self.delete_button = QPushButton(self.tr('delete'))
         self.delete_button.setFont(QFont('Segoe UI', 10))
         self.delete_button.setMinimumHeight(35)
@@ -543,7 +553,6 @@ class TextShortcutApp(QMainWindow):
         self.restart_button.clicked.connect(self.restart_program)
         self.restart_button.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        button_layout.addWidget(self.add_button)
         button_layout.addWidget(self.delete_button)
         button_layout.addWidget(self.delete_all_button)
         button_layout.addWidget(self.select_all_button)
@@ -1563,6 +1572,14 @@ class TextShortcutApp(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, self.tr('error'), f"Restart failed: {str(e)}")
 
+    def handle_new_connection(self):
+        """Handle new connection from another instance"""
+        # Show and activate the window
+        self.show()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+        self.activateWindow()
+        self.raise_()
+
     def closeEvent(self, event):
         """Handle window close event"""
         # Create custom message box
@@ -1595,10 +1612,23 @@ class TextShortcutApp(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
-    
+
+    # Check if another instance is already running
+    socket = QLocalSocket()
+    socket.connectToServer('ezText_SingleInstance')
+
+    if socket.waitForConnected(500):
+        # Another instance is running, send signal and exit
+        socket.write(b'SHOW')
+        socket.flush()
+        socket.waitForBytesWritten(1000)
+        socket.disconnectFromServer()
+        return 0
+
+    # First instance - start normally
     window = TextShortcutApp()
     window.show()
-    
+
     sys.exit(app.exec())
 
 if __name__ == '__main__':
