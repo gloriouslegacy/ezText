@@ -8,7 +8,8 @@ from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QLineEdit,
                              QTableWidget, QTableWidgetItem, QHeaderView,
-                             QMessageBox, QMenu, QFileDialog, QCheckBox, QSystemTrayIcon)
+                             QMessageBox, QMenu, QFileDialog, QCheckBox, QSystemTrayIcon,
+                             QComboBox)
 from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QKeySequence, QShortcut, QPalette, QColor, QFont, QAction, QIcon
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
@@ -362,71 +363,16 @@ class TextShortcutApp(QMainWindow):
     
     def on_text_mouse_press(self, event):
         """Handle text input mouse press"""
-        # If shortcut input has focus, clear it first
-        if self.shortcut_input.hasFocus():
-            self.shortcut_input.clearFocus()
-        
-        # Then allow text input to receive focus
+        # Allow text input to receive focus
         self.original_text_mouse_press(event)
-    
+
     def on_text_input_focus(self, event):
-        """Handle text input focus - visually indicate shortcut input is inactive"""
-        # Don't disable, just style it to look inactive
-        is_dark = darkdetect.isDark()
-        inactive_bg = "#1a1a1a" if is_dark else "#e0e0e0"
-        inactive_text = "#888888" if is_dark else "#666666"
-        self.shortcut_input.setStyleSheet(f"QLineEdit {{ background-color: {inactive_bg}; color: {inactive_text}; }}")
+        """Handle text input focus"""
         QLineEdit.focusInEvent(self.text_input, event)
-    
+
     def on_text_input_focus_out(self, event):
-        """Handle text input focus out - restore shortcut input styling"""
-        self.shortcut_input.setStyleSheet("")
+        """Handle text input focus out"""
         QLineEdit.focusOutEvent(self.text_input, event)
-    
-    def on_shortcut_mouse_press(self, event):
-        """Handle shortcut input mouse press"""
-        # Check if text input has any text
-        if not self.text_input.text().strip():
-            # Show warning if text is empty
-            self.log_status(self.tr('empty_fields'))
-            return
-
-        # Clear previous shortcut input before starting new recording
-        self.shortcut_input.clear()
-
-        # Call original mouse press to set focus
-        self.original_shortcut_mouse_press(event)
-        # Then start recording shortcut
-        self.record_shortcut(event)
-    
-    def on_shortcut_input_focus(self, event):
-        """Handle shortcut input focus - visually indicate text input is inactive"""
-        # Don't disable, just style it to look inactive
-        is_dark = darkdetect.isDark()
-        inactive_bg = "#1a1a1a" if is_dark else "#e0e0e0"
-        inactive_text = "#888888" if is_dark else "#666666"
-        self.text_input.setStyleSheet(f"QLineEdit {{ background-color: {inactive_bg}; color: {inactive_text}; }}")
-        QLineEdit.focusInEvent(self.shortcut_input, event)
-    
-    def on_shortcut_input_focus_out(self, event):
-        """Handle shortcut input focus out - stop recording and reset"""
-        # Stop any active keyboard recording
-        keyboard.unhook_all()
-
-        # Only clear if focus is moving to text input (not to add button or other widgets)
-        # This prevents clearing when user clicks the Add button
-        focused_widget = QApplication.focusWidget()
-        if focused_widget == self.text_input:
-            # Clear shortcut input field only when moving to text input
-            self.shortcut_input.clear()
-
-        # Restore text input styling
-        self.text_input.setStyleSheet("")
-
-        # Restore shortcut input styling
-        self.shortcut_input.setStyleSheet("")
-
-        QLineEdit.focusOutEvent(self.shortcut_input, event)
     
     def init_ui(self):
         self.setWindowTitle(self.tr('title'))
@@ -478,24 +424,53 @@ class TextShortcutApp(QMainWindow):
         self.text_input.focusInEvent = self.on_text_input_focus
         self.text_input.focusOutEvent = self.on_text_input_focus_out
         
-        # Shortcut input
+        # Shortcut input - Modifier keys and main key
         shortcut_label = QLabel(self.tr('shortcut') + ':')
         shortcut_label.setFont(QFont('Segoe UI', 10))
-        self.shortcut_input = QLineEdit()
-        self.shortcut_input.setPlaceholderText(self.tr('press_keys'))
-        self.shortcut_input.setFont(QFont('Segoe UI', 10))
-        self.shortcut_input.setMinimumHeight(35)
-        self.shortcut_input.setReadOnly(True)
-        
-        # Store original event handlers
-        self.original_shortcut_mouse_press = self.shortcut_input.mousePressEvent
-        self.original_shortcut_focus_in = self.shortcut_input.focusInEvent
-        self.original_shortcut_focus_out = self.shortcut_input.focusOutEvent
-        
-        # Override event handlers
-        self.shortcut_input.mousePressEvent = self.on_shortcut_mouse_press
-        self.shortcut_input.focusInEvent = self.on_shortcut_input_focus
-        self.shortcut_input.focusOutEvent = self.on_shortcut_input_focus_out
+
+        # Modifier keys checkboxes
+        self.ctrl_checkbox = QCheckBox('Ctrl')
+        self.ctrl_checkbox.setFont(QFont('Segoe UI', 10))
+        self.ctrl_checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.win_checkbox = QCheckBox('Win')
+        self.win_checkbox.setFont(QFont('Segoe UI', 10))
+        self.win_checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.alt_checkbox = QCheckBox('Alt')
+        self.alt_checkbox.setFont(QFont('Segoe UI', 10))
+        self.alt_checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.shift_checkbox = QCheckBox('Shift')
+        self.shift_checkbox.setFont(QFont('Segoe UI', 10))
+        self.shift_checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        # Main key combobox
+        self.key_combo = QComboBox()
+        self.key_combo.setFont(QFont('Segoe UI', 10))
+        self.key_combo.setMinimumHeight(35)
+        self.key_combo.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        # Populate combobox with keys
+        keys = []
+        # A-Z
+        for i in range(ord('A'), ord('Z') + 1):
+            keys.append(chr(i))
+        # 0-9
+        for i in range(10):
+            keys.append(str(i))
+        # Function keys
+        for i in range(1, 13):
+            keys.append(f'F{i}')
+        # Special keys
+        special_keys = ['Space', 'Tab', 'Enter', 'Esc', 'Backspace', 'Delete',
+                       'Insert', 'Home', 'End', 'PageUp', 'PageDown',
+                       'Left', 'Right', 'Up', 'Down',
+                       'Plus', 'Minus', 'Multiply', 'Divide']
+        keys.extend(special_keys)
+
+        self.key_combo.addItems(keys)
+        self.key_combo.setCurrentIndex(0)  # Default to 'A'
 
         # Add button (create early to add to input layout)
         self.add_button = QPushButton(self.tr('add'))
@@ -505,9 +480,13 @@ class TextShortcutApp(QMainWindow):
         self.add_button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         input_layout.addWidget(text_label)
-        input_layout.addWidget(self.text_input, 2)
+        input_layout.addWidget(self.text_input, 3)
         input_layout.addWidget(shortcut_label)
-        input_layout.addWidget(self.shortcut_input, 2)
+        input_layout.addWidget(self.ctrl_checkbox)
+        input_layout.addWidget(self.win_checkbox)
+        input_layout.addWidget(self.alt_checkbox)
+        input_layout.addWidget(self.shift_checkbox)
+        input_layout.addWidget(self.key_combo)
         input_layout.addWidget(self.add_button)
 
         # Warning label
@@ -856,70 +835,30 @@ class TextShortcutApp(QMainWindow):
         """
         self.setStyleSheet(style)
     
-    def record_shortcut(self, event):
-        """Record keyboard shortcut"""
-        # Don't start recording if text input has focus
-        if self.text_input.hasFocus():
-            return
-
-        self.shortcut_input.setText(self.tr('record_shortcut'))
-        is_dark = darkdetect.isDark()
-        recording_bg = "#4a4a2a" if is_dark else "#ffebcd"
-        recording_text = "#ffffff" if is_dark else "#000000"
-        current_style = self.shortcut_input.styleSheet()
-        self.shortcut_input.setStyleSheet(f"{current_style} QLineEdit {{ background-color: {recording_bg}; border: 2px solid #ffa500; color: {recording_text}; }}")
-        
-        recorded_keys = set()
-        key_mapping = {
-            'left ctrl': 'ctrl',
-            'right ctrl': 'ctrl',
-            'left shift': 'shift',
-            'right shift': 'shift',
-            'left alt': 'alt',
-            'right alt': 'alt',
-            'left windows': 'win',
-            'right windows': 'win',
-        }
-        
-        def normalize_key(key_name):
-            """Normalize key names"""
-            key_lower = key_name.lower()
-            return key_mapping.get(key_lower, key_name.lower())
-        
-        def on_key_event(e):
-            if e.event_type == 'down':
-                if e.name == 'esc':
-                    keyboard.unhook_all()
-                    self.shortcut_input.setText('')
-                    self.shortcut_input.setStyleSheet("")
-                    return
-                
-                key = normalize_key(e.name)
-                recorded_keys.add(key)
-                
-                # Build shortcut string with proper order
-                modifier_order = ['ctrl', 'alt', 'shift', 'win']
-                modifiers = [k for k in modifier_order if k in recorded_keys]
-                others = sorted([k for k in recorded_keys if k not in modifier_order])
-                
-                shortcut_list = modifiers + others
-                shortcut_str = '+'.join(shortcut_list)
-                self.shortcut_input.setText(shortcut_str)
-        
-        def on_key_up(e):
-            if len(recorded_keys) > 0:
-                keyboard.unhook_all()
-                self.shortcut_input.setStyleSheet("")
-        
-        keyboard.on_press(on_key_event)
-        keyboard.on_release(on_key_up, suppress=False)
-    
     def add_shortcut(self):
         """Add new shortcut"""
         text = self.text_input.text().strip()
-        shortcut = self.shortcut_input.text().strip()
-        
-        if not text or not shortcut:
+
+        # Build shortcut from checkboxes and combobox
+        modifiers = []
+        if self.ctrl_checkbox.isChecked():
+            modifiers.append('ctrl')
+        if self.win_checkbox.isChecked():
+            modifiers.append('win')
+        if self.alt_checkbox.isChecked():
+            modifiers.append('alt')
+        if self.shift_checkbox.isChecked():
+            modifiers.append('shift')
+
+        main_key = self.key_combo.currentText().lower()
+
+        # Build shortcut string
+        if modifiers:
+            shortcut = '+'.join(modifiers) + '+' + main_key
+        else:
+            shortcut = main_key
+
+        if not text:
             self.log_status(self.tr('empty_fields'))
             return
         
@@ -960,14 +899,13 @@ class TextShortcutApp(QMainWindow):
         # Register hotkey
         self.register_hotkey(shortcut, text)
 
-        # Clear inputs and reset focus
+        # Clear inputs and reset checkboxes
         self.text_input.clear()
-        self.shortcut_input.clear()
-        # Clear focus from shortcut input to reset its state
-        if self.shortcut_input.hasFocus():
-            self.shortcut_input.clearFocus()
-        # Reset styling to default
-        self.shortcut_input.setStyleSheet("")
+        self.ctrl_checkbox.setChecked(False)
+        self.win_checkbox.setChecked(False)
+        self.alt_checkbox.setChecked(False)
+        self.shift_checkbox.setChecked(False)
+        self.key_combo.setCurrentIndex(0)  # Reset to first item (A)
 
         # Auto save
         self.save_shortcuts(silent=True)
@@ -1140,9 +1078,8 @@ class TextShortcutApp(QMainWindow):
                 # Don't trigger if any input field in the app has focus
                 focused_widget = QApplication.focusWidget()
                 if focused_widget and (
-                    isinstance(focused_widget, QLineEdit) or 
-                    self.text_input.hasFocus() or 
-                    self.shortcut_input.hasFocus()
+                    isinstance(focused_widget, QLineEdit) or
+                    self.text_input.hasFocus()
                 ):
                     return
                 keyboard.write(text)
@@ -1286,7 +1223,6 @@ class TextShortcutApp(QMainWindow):
         """Update all UI text based on current language"""
         self.setWindowTitle(self.tr('title'))
         self.text_input.setPlaceholderText(self.tr('text'))
-        self.shortcut_input.setPlaceholderText(self.tr('press_keys'))
         self.add_button.setText(self.tr('add'))
         self.delete_button.setText(self.tr('delete'))
         self.delete_all_button.setText(self.tr('delete_all'))
@@ -1587,16 +1523,20 @@ class TextShortcutApp(QMainWindow):
         msg_box.setWindowTitle(self.tr('exit_title'))
         msg_box.setText(self.tr('exit_message'))
         msg_box.setIcon(QMessageBox.Icon.Question)
-        
+
         # Add custom buttons (order: Tray, Exit, Cancel)
+        # Using ActionRole for all buttons to maintain left-to-right order
         tray_button = msg_box.addButton(self.tr('minimize_to_tray'), QMessageBox.ButtonRole.ActionRole)
-        exit_button = msg_box.addButton(self.tr('exit_button'), QMessageBox.ButtonRole.AcceptRole)
+        exit_button = msg_box.addButton(self.tr('exit_button'), QMessageBox.ButtonRole.ActionRole)
         cancel_button = msg_box.addButton(self.tr('cancel'), QMessageBox.ButtonRole.RejectRole)
-        
+
+        # Set cancel button as escape button
+        msg_box.setEscapeButton(cancel_button)
+
         msg_box.exec()
-        
+
         clicked_button = msg_box.clickedButton()
-        
+
         if clicked_button == exit_button:
             # Exit application
             event.accept()
