@@ -6,7 +6,7 @@ import webbrowser
 import subprocess
 from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                             QHBoxLayout, QPushButton, QLabel, QLineEdit,
+                             QHBoxLayout, QPushButton, QLabel, QLineEdit, QTextEdit,
                              QTableWidget, QTableWidgetItem, QHeaderView,
                              QMessageBox, QMenu, QFileDialog, QCheckBox, QSystemTrayIcon,
                              QComboBox)
@@ -187,7 +187,7 @@ class TextShortcutApp(QMainWindow):
                 'update_available_title': '업데이트 사용 가능',
                 'update_available_text': '새 버전 ({0})이 사용 가능합니다!\n\n현재 버전: {1}',
                 'update_confirm': '지금 업데이트를 다운로드하고 설치하시겠습니까?',
-                'update_declined': '사용자가 업데이트를 거부했습니다',
+                'update_declined': '업데이트를 취소하였습니다.',
                 'update_downloading': '{0} 버전으로 자동 업데이트 중...',
                 'download_starting': 'GitHub에서 다운로드 시작 중...',
                 'download_progress': '업데이트 다운로드 중: {0}% ({1}/{2} MB)',
@@ -391,11 +391,11 @@ class TextShortcutApp(QMainWindow):
 
     def on_text_input_focus(self, event):
         """Handle text input focus"""
-        QLineEdit.focusInEvent(self.text_input, event)
+        QTextEdit.focusInEvent(self.text_input, event)
 
     def on_text_input_focus_out(self, event):
         """Handle text input focus out"""
-        QLineEdit.focusOutEvent(self.text_input, event)
+        QTextEdit.focusOutEvent(self.text_input, event)
     
     def init_ui(self):
         self.setWindowTitle(self.tr('title'))
@@ -426,26 +426,35 @@ class TextShortcutApp(QMainWindow):
         self.status_bar = self.statusBar()
         self.status_bar.setFont(QFont('Segoe UI', 9))
         
-        # Input section
-        input_layout = QHBoxLayout()
-        
+        # Input section - Text input (first row)
+        text_layout = QHBoxLayout()
+
         # Text input
         text_label = QLabel(self.tr('text') + ':')
         text_label.setFont(QFont('Segoe UI', 10))
-        self.text_input = QLineEdit()
+        self.text_input = QTextEdit()
         self.text_input.setPlaceholderText(self.tr('text'))
         self.text_input.setFont(QFont('Segoe UI', 10))
-        self.text_input.setMinimumHeight(35)
-        
+        # Set height for 5 lines
+        font_metrics = self.text_input.fontMetrics()
+        line_height = font_metrics.lineSpacing()
+        self.text_input.setFixedHeight(line_height * 5 + 10)  # 5 lines + padding
+
         # Store original event handlers
         self.original_text_mouse_press = self.text_input.mousePressEvent
         self.original_text_focus_in = self.text_input.focusInEvent
         self.original_text_focus_out = self.text_input.focusOutEvent
-        
+
         # Override event handlers
         self.text_input.mousePressEvent = self.on_text_mouse_press
         self.text_input.focusInEvent = self.on_text_input_focus
         self.text_input.focusOutEvent = self.on_text_input_focus_out
+
+        text_layout.addWidget(text_label)
+        text_layout.addWidget(self.text_input)
+
+        # Shortcut input section (second row)
+        shortcut_layout = QHBoxLayout()
         
         # Shortcut input - Modifier keys and main key
         shortcut_label = QLabel(self.tr('shortcut') + ':')
@@ -488,29 +497,26 @@ class TextShortcutApp(QMainWindow):
         # Special keys
         special_keys = ['Space', 'Tab', 'Enter', 'Esc', 'Backspace', 'Delete',
                        'Insert', 'Home', 'End', 'PageUp', 'PageDown',
-                       'Left', 'Right', 'Up', 'Down',
-                       'Plus', 'Minus', 'Multiply', 'Divide']
+                       'Left', 'Right', 'Up', 'Down']
         keys.extend(special_keys)
 
         self.key_combo.addItems(keys)
         self.key_combo.setCurrentIndex(0)  # Default to 'A'
 
-        # Add button (create early to add to input layout)
+        # Add button (create early to add to shortcut layout)
         self.add_button = QPushButton(self.tr('add'))
         self.add_button.setFont(QFont('Segoe UI', 10))
         self.add_button.setMinimumHeight(35)
         self.add_button.clicked.connect(self.add_shortcut)
         self.add_button.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        input_layout.addWidget(text_label)
-        input_layout.addWidget(self.text_input, 3)
-        input_layout.addWidget(shortcut_label)
-        input_layout.addWidget(self.ctrl_checkbox)
-        input_layout.addWidget(self.win_checkbox)
-        input_layout.addWidget(self.alt_checkbox)
-        input_layout.addWidget(self.shift_checkbox)
-        input_layout.addWidget(self.key_combo)
-        input_layout.addWidget(self.add_button)
+        shortcut_layout.addWidget(shortcut_label)
+        shortcut_layout.addWidget(self.ctrl_checkbox)
+        shortcut_layout.addWidget(self.win_checkbox)
+        shortcut_layout.addWidget(self.alt_checkbox)
+        shortcut_layout.addWidget(self.shift_checkbox)
+        shortcut_layout.addWidget(self.key_combo)
+        shortcut_layout.addWidget(self.add_button)
 
         # Warning label
         self.warning_label = QLabel(self.tr('shortcut_conflict_warning'))
@@ -579,7 +585,8 @@ class TextShortcutApp(QMainWindow):
         self.table.verticalHeader().setVisible(False)  # Hide row numbers
         
         # Add layouts to main layout
-        main_layout.addLayout(input_layout)
+        main_layout.addLayout(text_layout)
+        main_layout.addLayout(shortcut_layout)
         main_layout.addLayout(warning_layout)
         main_layout.addLayout(button_layout)
         main_layout.addWidget(self.table)
@@ -772,6 +779,17 @@ class TextShortcutApp(QMainWindow):
                 background-color: {bg_color};
                 color: {border_color};
             }}
+            QTextEdit {{
+                background-color: {surface_color};
+                border: 1px solid {border_color};
+                border-radius: 4px;
+                padding: 5px 10px;
+                color: {text_color};
+            }}
+            QTextEdit:focus {{
+                border: 2px solid {accent_color};
+                background-color: {surface_color};
+            }}
             QPushButton {{
                 background-color: {surface_color};
                 border: 1px solid {border_color};
@@ -860,7 +878,7 @@ class TextShortcutApp(QMainWindow):
     
     def add_shortcut(self):
         """Add new shortcut"""
-        text = self.text_input.text().strip()
+        text = self.text_input.toPlainText().strip()
 
         # Build shortcut from checkboxes and combobox
         modifiers = []
@@ -1101,7 +1119,7 @@ class TextShortcutApp(QMainWindow):
                 # Don't trigger if any input field in the app has focus
                 focused_widget = QApplication.focusWidget()
                 if focused_widget and (
-                    isinstance(focused_widget, QLineEdit) or
+                    isinstance(focused_widget, (QLineEdit, QTextEdit)) or
                     self.text_input.hasFocus()
                 ):
                     return
@@ -1347,6 +1365,7 @@ class TextShortcutApp(QMainWindow):
             # User confirmed - download and install
             if release_info['download_url']:
                 self.log_status(self.tr('update_downloading').format(release_info['version']))
+                QApplication.processEvents()  # Force UI update
                 success = self.download_and_run_installer(release_info['download_url'])
 
                 if success:
@@ -1379,6 +1398,7 @@ class TextShortcutApp(QMainWindow):
     def check_for_updates(self):
         """Check for updates manually from menu"""
         self.log_status(self.tr('update_checking'))
+        QApplication.processEvents()  # Force UI update
 
         self.update_thread = UpdateCheckThread(self.updater)
         self.update_thread.update_available.connect(self.on_update_available)
@@ -1400,6 +1420,7 @@ class TextShortcutApp(QMainWindow):
         if result == QMessageBox.StandardButton.Yes:
             if release_info['download_url']:
                 self.log_status(self.tr('update_downloading').format(release_info['version']))
+                QApplication.processEvents()  # Force UI update
 
                 # Setup version: Download and run installer directly (no updater.exe)
                 # The installer will handle closing the app and updating files
@@ -1440,6 +1461,7 @@ class TextShortcutApp(QMainWindow):
                 downloaded_mb = downloaded / (1024 * 1024)
                 total_mb = total_size / (1024 * 1024)
                 self.log_status(self.tr('download_progress').format(percent, f"{downloaded_mb:.1f}", f"{total_mb:.1f}"))
+                QApplication.processEvents()  # Force UI update
 
         try:
             # Create temp directory
@@ -1448,8 +1470,10 @@ class TextShortcutApp(QMainWindow):
 
             # Download the installer with progress
             self.log_status(self.tr('download_starting'))
+            QApplication.processEvents()  # Force UI update
             urllib.request.urlretrieve(download_url, installer_path, reporthook=download_progress)
             self.log_status(self.tr('download_completed').format(installer_path))
+            QApplication.processEvents()  # Force UI update
 
             # Run the installer in normal mode (not silent)
             # The installer will:
@@ -1458,8 +1482,10 @@ class TextShortcutApp(QMainWindow):
             # 3. Update all files
             # 4. Optionally restart the app
             self.log_status(self.tr('installer_launching'))
+            QApplication.processEvents()  # Force UI update
             subprocess.Popen([installer_path])
             self.log_status(self.tr('installer_started'))
+            QApplication.processEvents()  # Force UI update
 
             return True
 
