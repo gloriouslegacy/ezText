@@ -509,6 +509,7 @@ class TextShortcutApp(QMainWindow):
         self.add_button.setMinimumHeight(35)
         self.add_button.clicked.connect(self.add_shortcut)
         self.add_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.add_button.setObjectName("addButton")
 
         shortcut_layout.addWidget(shortcut_label)
         shortcut_layout.addWidget(self.ctrl_checkbox)
@@ -802,6 +803,18 @@ class TextShortcutApp(QMainWindow):
             }}
             QPushButton:pressed {{
                 background-color: {border_color};
+            }}
+            QPushButton#addButton {{
+                background-color: {accent_color};
+                color: #ffffff;
+                font-weight: bold;
+                border: none;
+            }}
+            QPushButton#addButton:hover {{
+                background-color: {'#1a86d9' if is_dark else '#0078d4'};
+            }}
+            QPushButton#addButton:pressed {{
+                background-color: {'#0067c0' if is_dark else '#005a9e'};
             }}
             QTableWidget {{
                 background-color: {surface_color};
