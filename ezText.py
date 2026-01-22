@@ -309,6 +309,32 @@ class TextShortcutApp(QMainWindow):
         # Check for updates on startup (silent)
         self.check_for_updates_silent()
         
+        # Setup timer for periodic hotkey refresh to maintain stability on Windows
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self.refresh_hotkeys)
+        
+        # Run every 5 minutes (300,000ms) to prevent Windows from dropping the hook
+        self.refresh_timer.start(300000)
+        
+    def refresh_hotkeys(self):
+        
+            """
+            Periodically re-registers all hotkeys to prevent Windows from disconnecting idle hooks.
+            """
+            if not self.shortcuts_dict:
+                return
+                
+            try:
+                for shortcut in list(self.active_shortcuts):
+                    self.unregister_hotkey(shortcut)
+                
+                for shortcut, text in self.shortcuts_dict.items():
+                    self.register_hotkey(shortcut, text)
+                
+                self.log_status("Shortcuts refreshed for stability", 2000)
+            except Exception as e:
+                print(f"Error during hotkey refresh: {e}")
+ 
     def tr(self, key):
         """Get translated text"""
         return self.translations[self.current_language].get(key, key)
@@ -1139,7 +1165,9 @@ class TextShortcutApp(QMainWindow):
                 keyboard.write(text)
             
             keyboard.add_hotkey(shortcut, callback)
-            self.active_shortcuts.append(shortcut)
+            
+            if shortcut not in self.active_shortcuts:
+                self.active_shortcuts.append(shortcut)
         except Exception as e:
             print(f"Error registering hotkey {shortcut}: {e}")
     
