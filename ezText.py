@@ -117,6 +117,11 @@ class TextShortcutApp(QMainWindow):
         # Theme tracking
         self.current_theme = None
         self.theme_mode = self.settings.value('theme_mode', 'auto')  # auto, light, dark
+        
+        # Keepalive timer for hotkeys (prevents hotkeys from becoming inactive)
+        self.hotkey_keepalive_timer = QTimer(self)
+        self.hotkey_keepalive_timer.timeout.connect(self.refresh_hotkeys)
+        self.hotkey_keepalive_timer.start(60000)  # Refresh every 60 seconds
 
         # Windows system reserved shortcuts
         self.reserved_shortcuts = {
@@ -181,11 +186,11 @@ class TextShortcutApp(QMainWindow):
                 'minimized_to_tray': '트레이 아이콘으로 최소화되었습니다. 아이콘을 더블클릭하면 복원됩니다.',
                 'shortcut_conflict_warning': '⚠️ 다른 프로그램과 단축키 충돌되지 않도록 유의하세요.',
                 'theme': '테마',
-                'theme_auto': '자동 (시스템 따라가기)',
+                'theme_auto': '자동 (시스템 설정)',
                 'theme_light': '라이트 테마',
                 'theme_dark': '다크 테마',
                 'update_available_title': '업데이트 사용 가능',
-                'update_available_text': '새 버전 ({0})이 사용 가능합니다!\n\n현재 버전: {1}',
+                'update_available_text': '새 버전 ({0}) 사용 가능합니다!\n\n현재 버전: {1}',
                 'update_confirm': '지금 업데이트를 다운로드하고 설치하시겠습니까?',
                 'update_declined': '업데이트를 취소하였습니다.',
                 'update_downloading': '{0} 버전으로 자동 업데이트 중...',
@@ -197,7 +202,7 @@ class TextShortcutApp(QMainWindow):
                 'update_downloaded': '업데이트 다운로드 완료. 설치 프로그램이 자동으로 열립니다.',
                 'update_failed_msg': '업데이트 다운로드에 실패했습니다. 도움말 메뉴에서 수동으로 업데이트해주세요.',
                 'update_auto_failed': '자동 업데이트 실패',
-                'new_version_available': '새 버전 {0}이 사용 가능합니다!',
+                'new_version_available': '새 버전 {0} 사용 가능합니다!',
                 'update_title': '업데이트',
                 'update_success_msg': '업데이트 다운로드 성공!\n\n설치 프로그램이 지금 열립니다.\n설치 마법사를 따라주세요.',
                 'update_error_title': '업데이트 오류',
@@ -1180,6 +1185,20 @@ class TextShortcutApp(QMainWindow):
         except Exception as e:
             print(f"Error unregistering hotkey {shortcut}: {e}")
     
+    def refresh_hotkeys(self):
+        """Refresh all hotkeys to keep them active (prevents timeout issues)"""
+        try:
+            # Store current shortcuts
+            current_shortcuts = dict(self.shortcuts_dict)
+            
+            # Unregister and re-register all active shortcuts
+            for shortcut in list(self.active_shortcuts):
+                if shortcut in current_shortcuts:
+                    self.unregister_hotkey(shortcut)
+                    self.register_hotkey(shortcut, current_shortcuts[shortcut])
+        except Exception as e:
+            print(f"Error refreshing hotkeys: {e}")
+    
     def save_shortcuts(self, silent=False):
         """Save shortcuts to ini file"""
         config = configparser.ConfigParser()
@@ -1564,6 +1583,10 @@ class TextShortcutApp(QMainWindow):
         """Exit the application completely"""
         # Save window geometry
         self.settings.setValue('geometry', self.saveGeometry())
+        
+        # Stop keepalive timer
+        if hasattr(self, 'hotkey_keepalive_timer'):
+            self.hotkey_keepalive_timer.stop()
         
         # Cleanup hotkeys
         for shortcut in list(self.active_shortcuts):
